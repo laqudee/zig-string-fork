@@ -3,7 +3,7 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const assert = std.debug.assert;
 const eql = std.mem.eql;
 
-const zig_string = @import("../src/main.zig");
+const zig_string = @import("main.zig");
 const String = zig_string.String;
 
 test "Basic Usage" {

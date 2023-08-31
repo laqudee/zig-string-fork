@@ -205,6 +205,242 @@ pub const String = struct {
         try self.removeRange(index, index + 1);
     }
 
+    /// Removes a range of character from the String
+    /// Start (inclusive) - End (exclusive)
+    pub fn removeRange(self: *String, start: usize, end: usize) Error!void {
+        const length = self.len();
+        if (end < start or end > length) return Error.InvalidRange;
+
+        if (self.buffer) |buffer| {
+            const rStart = String.getIndex(buffer, start, true).?;
+            const rEnd = String.getIndex(buffer, end, true).?;
+            const difference = rEnd - rStart;
+
+            var i: usize = rEnd;
+            while (i < self.size) : (i += 1) {
+                buffer[i - difference] = buffer[i];
+            }
+
+            self.size -= difference;
+        }
+    }
+
+    /// Trims all whitelist characters at the start of the String.
+    pub fn trimStart(self: *String, whitelist: []const u8) void {
+        if (self.buffer) |buffer| {
+            var i: usize = 0;
+            while (i < self.size) : (i += 1) {
+                const size = String.getUTF8Size(buffer[i]);
+                if (size > 1 or !String.inWhitelist(buffer[i], whitelist)) break;
+            }
+
+            if (String.getIndex(buffer, i, false)) |k| {
+                self.removeRange(0, k) catch {};
+            }
+        }
+    }
+
+    /// Trim all whitelist characters at end of the String.
+    pub fn trimEnd(self: *String, whitelist: []const u8) void {
+        self.reverse();
+        self.trimStart(whitelist);
+        self.reverse();
+    }
+
+    /// Trims all whitelist characters from both ends of the String
+    pub fn trim(self: *String, whitelist: []const u8) void {
+        self.trimStart(whitelist);
+        self.trimEnd(whitelist);
+    }
+
+    /// Copie this String into a new one
+    /// User is responsible for managing the new String
+    pub fn clone(self: String) Error!String {
+        var newString = String.init(self.allocator);
+        try newString.concat(self.str());
+        return newString;
+    }
+
+    /// Reverses the characters in this String
+    pub fn reverse(self: *String) void {
+        if (self.buffer) |buffer| {
+            var i: usize = 0;
+            while (i < self.size) {
+                const size = String.getUTF8Size(buffer[i]);
+                if (size > 1) std.mem.reverse(u8, buffer[i..(i + size)]);
+                i += size;
+            }
+
+            std.mem.reverse(u8, buffer[0..self.size]);
+        }
+    }
+
+    /// Repeats this String n times
+    pub fn repeat(self: *String, n: usize) Error!void {
+        try self.allocate(self.size * (n + 1));
+        if (self.buffer) |buffer| {
+            var i: usize = 1;
+            while (i <= n) : (i += 1) {
+                var j: usize = 0;
+                while (j < self.size) : (j += 1) {
+                    buffer[((i * self.size) + j)] = buffer[j];
+                }
+            }
+
+            self.size *= (n + 1);
+        }
+    }
+
+    /// Checks the String is empty
+    pub inline fn isEmpty(self: String) bool {
+        return self.size == 0;
+    }
+
+    /// SPllits the String into a slice, based on a delimiter and an index
+    pub fn split(self: *const String, delimiters: []const u8, index: usize) ?[]const u8 {
+        if (self.buffer) |buffer| {
+            var i: usize = 0;
+            var block: usize = 0;
+            var start: usize = 0;
+
+            while (i < self.size) {
+                const size = String.getUTF8Size(buffer[i]);
+                if (size == delimiters.len) {
+                    if (std.mem.eql(u8, delimiters, buffer[i..(i + size)])) {
+                        if (block == index) return buffer[start..i];
+                        start = i + size;
+                        block += 1;
+                    }
+                }
+
+                i += size;
+            }
+
+            if (i > self.size - 1 and block == index) {
+                return buffer[start..self.size];
+            }
+        }
+
+        return null;
+    }
+
+    /// Splits the String into a new String, based on delimiters and an index
+    /// The user of this function is in charge of the memory of the new String
+    pub fn splitToString(self: *const String, delimiters: []const u8, index: usize) Error!?String {
+        if (self.split(delimiters, index)) |block| {
+            var string = String.init(self.allocator);
+            try string.concat(block);
+            return string;
+        }
+
+        return null;
+    }
+
+    /// Clears the contents of the String but leaves the capacity
+    pub fn clear(self: *String) void {
+        if (self.buffer) |buffer| {
+            for (buffer) |*ch| ch.* = 0;
+            self.size = 0;
+        }
+    }
+
+    /// Converts all (ASCII) uppercase letters to lowercase
+    pub fn toLowercase(self: *String) void {
+        if (self.buffer) |buffer| {
+            var i: usize = 0;
+            while (i < self.size) {
+                const size = String.getUTF8Size(buffer[i]);
+                if (size == 1) buffer[i] = std.ascii.toLower(buffer[i]);
+                i += size;
+            }
+        }
+    }
+
+    /// Converts all (ASCII) uppercase letters to lowercase
+    pub fn toUppercase(self: *String) void {
+        if (self.buffer) |buffer| {
+            var i: usize = 0;
+            while (i < self.size) {
+                const size = String.getUTF8Size(buffer[i]);
+                if (size == 1) buffer[i] = std.ascii.toUpper(buffer[i]);
+                i += size;
+            }
+        }
+    }
+
+    /// Creates a String from a given range
+    /// User is responsible for managing the new String
+    pub fn substr(self: String, start: usize, end: usize) Error!String {
+        var result = String.init(self.allocator);
+
+        if (self.buffer) |buffer| {
+            if (String.getIndex(buffer, start, true)) |rStart| {
+                if (String.getIndex(buffer, end, true)) |rEnd| {
+                    if (rEnd < rStart or rEnd > self.size)
+                        return Error.InvalidRange;
+                    try result.concat(buffer[rStart..rEnd]);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// Writer functionality for the String
+    pub usingnamespace struct {
+        pub const Writer = std.io.Writer(*String, Error, appendWrite);
+
+        pub fn writer(self: *String) Writer {
+            return .{ .context = self };
+        }
+
+        fn appendWrite(self: *String, m: []const u8) !usize {
+            try self.concat(m);
+            return m.len;
+        }
+    };
+
+    /// Iterator support
+    pub usingnamespace struct {
+        pub const StringIterator = struct {
+            string: *const String,
+            index: usize,
+
+            pub fn next(it: *StringIterator) ?[]const u8 {
+                if (it.string.buffer) |buffer| {
+                    if (it.index == it.string.size) return null;
+                    var i = it.index;
+                    it.index += String.getUTF8Size(buffer[i]);
+                    return buffer[i..it.index];
+                } else {
+                    return null;
+                }
+            }
+        };
+
+        pub fn iterator(self: *const String) StringIterator {
+            return StringIterator{
+                .string = self,
+                .index = 0,
+            };
+        }
+    };
+
+    /// Returns whether or not a character is whitelisted
+    fn inWhitelist(char: u8, whitelist: []const u8) bool {
+        var i: usize = 0;
+        while (i < whitelist.len) : (i += 1) {
+            if (whitelist[i] == char) return true;
+        }
+
+        return false;
+    }
+
+    /// Checks if byte is part of UTF-8 character
+    inline fn isUTF8Byte(byte: u8) bool {
+        return (byte & 0x80) > 0 and (((byte << 1) & 0x80) == 0);
+    }
+
     /// Returns the real index of a unicode string literal
     fn getIndex(unicode: []const u8, index: usize, real: bool) ?usize {
         var i: usize = 0;
