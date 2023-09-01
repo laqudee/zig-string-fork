@@ -1,6 +1,7 @@
 const std = @import("std");
 const ArenaAllocator = std.heap.ArenaAllocator;
 const assert = std.debug.assert;
+const print = std.debug.print;
 const eql = std.mem.eql;
 
 const zig_string = @import("main.zig");
@@ -45,14 +46,19 @@ test "String Tests" {
     assert(myStr.capacity() == 0);
 
     // concat
-    try myStr.concat("A");
-    try myStr.concat("\u{5360}");
-    try myStr.concat("💯");
-    try myStr.concat("Hello🔥");
+    try myStr.concat("A"); // size: 1
+    print("{} \n", .{myStr.size}); // 1
+    try myStr.concat("\u{5360}"); // size: 3
+    print("{} \n", .{myStr.size}); // 4
+    try myStr.concat("💯"); // size: 4
+    print("{} \n", .{myStr.size}); // 8
+    try myStr.concat("Hello🔥"); // size: 5 + 4
+    print("{?s} \n", .{myStr.str()}); // A占💯Hello🔥
 
     assert(myStr.size == 17);
 
     // pop & length
+    // len是，ASCII码与Unicode字符数的集合
     assert(myStr.len() == 9);
     assert(eql(u8, myStr.pop().?, "🔥"));
     assert(myStr.len() == 8);
@@ -64,16 +70,19 @@ test "String Tests" {
     assert(myStr.cmp(myStr.str()));
 
     // charAt
+    // 返回一个unicode字符
     assert(eql(u8, myStr.charAt(2).?, "💯"));
     assert(eql(u8, myStr.charAt(1).?, "\u{5360}"));
     assert(eql(u8, myStr.charAt(0).?, "A"));
 
     // insert
+    // 插入一个unicode字符
     try myStr.insert("🔥", 1);
     assert(eql(u8, myStr.charAt(1).?, "🔥"));
     assert(myStr.cmp("A🔥\u{5360}💯Hell"));
 
     // find
+    // 查找一个unicode字符
     assert(myStr.find("🔥").? == 1);
     assert(myStr.find("💯").? == 3);
     assert(myStr.find("Hell").? == 4);
@@ -84,10 +93,12 @@ test "String Tests" {
     try myStr.remove(myStr.len() - 1);
     assert(myStr.cmp("💯Hel"));
 
+    // 白名单
     const whitelist = [_]u8{ ' ', '\t', '\n', '\r' };
 
     // trimStart
     try myStr.insert("      ", 0);
+    print("{?s} \n", .{myStr.str()});
     myStr.trimStart(whitelist[0..]);
     assert(myStr.cmp("💯Hel"));
 
@@ -97,6 +108,7 @@ test "String Tests" {
     assert(myStr.cmp("💯Hello💯"));
 
     // clone
+    // 返回一个新的String 类型
     var testStr = try myStr.clone();
     defer testStr.deinit();
     assert(testStr.cmp(myStr.str()));
@@ -115,6 +127,7 @@ test "String Tests" {
     assert(!myStr.isEmpty());
 
     // split
+    // 返回slice切片
     assert(eql(u8, myStr.split("💯", 0).?, ""));
     assert(eql(u8, myStr.split("💯", 1).?, "Hello"));
     assert(eql(u8, myStr.split("💯", 2).?, ""));
@@ -143,6 +156,7 @@ test "String Tests" {
     assert(myStr.cmp("💯hello💯💯hello💯💯hello💯"));
 
     // substr
+    // 返回截取的子String
     var subStr = try myStr.substr(0, 7);
     defer subStr.deinit();
     assert(subStr.cmp("💯hello💯"));
